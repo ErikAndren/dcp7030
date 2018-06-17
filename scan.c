@@ -6,7 +6,7 @@
 #include <libusb.h>
 
 #define VID 0x04f9
-#define PID 0x0107
+#define PID 0x01ea
 #define PAGE_WIDTH 816
 #define PAGE_HEIGHT 1376
 #define TIMEOUT 1000
@@ -86,7 +86,7 @@ int bulk_write(int endpoint, unsigned char *buf, int length) {
 char *build_config(const char *mode, int resX, int resY, int w, int h) {
     char *data = calloc(255, sizeof(char));
     snprintf(data, 255,
-            "R=%d,%d\nM=%s\nC=NONE\nB=100\nN=100\nU=OFF\nA=0,0,%d,%d\n",
+            "R=%d,%d\nM=%s\nC=NONE\nB=50\nN=50\nU=OFF\nP=OFF\nA=0,0,%d,%d\n",
             resX, resY, mode, w, h);
     return data;
 }
@@ -95,7 +95,7 @@ void send_config(const char *data) {
     if(*data) fprintf(stderr, "Sending configuration data:\n%s", data);
     unsigned char buf[255];
     int length = snprintf(buf, 255, "\x1bX\n%s\x80", data);
-    bulk_write(3, buf, length);
+    bulk_write(4, buf, length);
 }
 
 int main(int argc, char **argv) {
@@ -133,8 +133,12 @@ int main(int argc, char **argv) {
     }
     libusb_claim_interface(device_handle, 0);
     libusb_set_interface_alt_setting(device_handle, 0, 0);
+    
+    // This is send by the brscan3 driver, but does not seem to be necessary
+    //int result = libusb_clear_halt(device_handle, LIBUSB_ENDPOINT_OUT | 4);
+    //fprintf(stderr, "clear_halt: %i\n", result);
 
-    control_in_vendor_device(1, 2, 0, 255); /* returns 05 10 01 02 00 */
+    control_in_vendor_device(1, 2, 0, 5); /* returns 05 10 01 02 00 */
     if(mode) {
         char *config = build_config(
                 mode, MIN(resolution, 300), resolution,
@@ -146,13 +150,12 @@ int main(int argc, char **argv) {
     FILE *fp = NULL;
     int sleep_time = 0;
     while(1) {
-        unsigned char buf[0x1000];
-        int num_bytes = bulk_read(4, buf, 0x1000);
+        unsigned char buf[0x3000];
+        int num_bytes = bulk_read(3, buf, 0x3000);
         if(num_bytes) sleep_time = 0;
         if(num_bytes > 2) {
             if(!fp) {
-                char fname[8];
-                snprintf(fname, 8, "%03d.raw", page);
+                char *fname = "image.raw";
                 fprintf(stderr, "Opening '%s'...\n", fname);
                 fp = fopen(fname, "wb");
             }
@@ -171,11 +174,14 @@ int main(int argc, char **argv) {
             fprintf(stderr, "No more pages\n"); break;
         } else if((num_bytes == 1 && buf[0] == 0x81) || sleep_time >= 10) {
             fprintf(stderr, "Feeding in another page");
-            if(sleep_time >= 10) fprintf(stderr, " (timeout)");
+            if(sleep_time >= 50) fprintf(stderr, " (timeout)");
             fprintf(stderr, "\n");
-            fclose(fp); fp = NULL;
-            send_config("");
             page++;
+            if (fp) {
+                fclose(fp);
+                fp = NULL;
+            }
+            //send_config("");
             sleep_time = 0;
         } else if(num_bytes == 1 && buf[0] == 0xc3) {
             fprintf(stderr, "Paper jam\n"); break;
@@ -189,7 +195,7 @@ int main(int argc, char **argv) {
         }
     }
     if(fp) fclose(fp);
-    control_in_vendor_device(2, 2, 0, 255); /* returns 05 10 02 02 00 */
+    control_in_vendor_device(2, 2, 0, 5); /* returns 05 10 02 02 00 */
 
     libusb_release_interface(device_handle, 0);
     libusb_close(device_handle);
