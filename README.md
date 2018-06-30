@@ -16,6 +16,31 @@ Just compile with "make" and run the binary "./scan"
 
 Then use "./raw2pnm image.raw" to create a viewable image.
 
+## How to crosscompile for OpenWRT
+
+### 1.
+Get the correct OpenWRT SDK for your router. You can also download the full source and compile the SDK yourself, but you should bring some time. I only used the SDK, follow these instructions:
+https://openwrt.org/docs/guide-developer/using_the_sdk
+
+I had to disable package signing in the menuconfig.
+In the step "Select Packages", you only need to install libusb-1.0.
+
+### 2.
+Get your environment ready for crosscompiling. This guide gives a good overview:
+https://openwrt.org/docs/guide-developer/crosscompile
+
+The "staging_dir" is inside your sdk folder.
+
+### 3.
+The Makefile of this project has a "crosscompile" target.
+Edit the SDK_DIR variable in the script. You may also have to change other commands
+if your router architecture is not "mips_24kc".
+
+"make crosscompile" should output both binaries. Copy them to your router, install libusb (opkg install libusb-1.0), connect your scanner and run ./scan there.
+Keep in mind that the flash memory of the router does not like writing data often, so it's best to do this on external storage.
+
+I have also included precompiled files in the "bin-mips" folder, but they probably only work on "ar71xx" routers with OpenWrt/LEDE 17.
+
 ## Work in progress:
 Since I want to use this on my router, I want to create a complete workflow
 that outputs a jpeg file which I can then show in a webserver, based on this project:
