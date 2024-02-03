@@ -14,6 +14,10 @@
 #define MAX(a,b) (a>b?a:b)
 #define MIN(a,b) (a<b?a:b)
 
+#define SCAN_DONE 0x80
+#define NEXT_PAGE 0x81
+#define SCAN_ABORTED 0x83
+
 libusb_device_handle *device_handle;
 
 void control_in_vendor_device(int request, int value, int index, int length) {
@@ -170,9 +174,9 @@ int main(int argc, char **argv) {
             fprintf(stderr, "ERROR: Nothing to scan\n"); break;
         } else if(num_bytes == 2 && buf[0] == 0xc3 && buf[1] == 0x00) {
             fprintf(stderr, "ERROR: Paper jam\n"); break;
-        } else if(num_bytes == 1 && buf[0] == 0x80) {
+        } else if(num_bytes == 1 && buf[0] == SCAN_DONE) {
             fprintf(stderr, "No more pages\n"); break;
-        } else if((num_bytes == 1 && buf[0] == 0x81) || sleep_time >= 10) {
+        } else if((num_bytes == 1 && buf[0] == NEXT_PAGE) || sleep_time >= 10) {
             fprintf(stderr, "Feeding in another page");
             if(sleep_time >= 50) fprintf(stderr, " (timeout)");
             fprintf(stderr, "\n");
