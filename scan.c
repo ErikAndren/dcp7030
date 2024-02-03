@@ -5,6 +5,8 @@
 
 #include <libusb.h>
 
+#include <signal.h>
+
 #define VID 0x04f9
 #define PID 0x01ea
 #define PAGE_WIDTH 816
@@ -19,6 +21,19 @@
 #define SCAN_ABORTED 0x83
 
 libusb_device_handle *device_handle;
+
+void abort_scan();
+
+// Signal handler function
+void sigint_handler(int signum) {
+    fprintf(stderr, "Caught %s signal (Ctrl+C). Stopping scan\n", strsignal(signum));
+    // You can add additional cleanup or handling code here
+    abort_scan(); 
+
+    if (signum == SIGKILL) {
+    	exit(signum);
+    }
+}
 
 void control_in_vendor_device(int request, int value, int index, int length) {
     unsigned char *buf = calloc(length, sizeof(unsigned char));
@@ -95,6 +110,19 @@ char *build_config(const char *mode, int resX, int resY, int w, int h) {
     return data;
 }
 
+void abort_scan() {
+    unsigned char stop_scan[] = "\x1b\x52";
+    int n;
+
+    fprintf(stderr, "Aborting scan\n");
+ 
+    n = bulk_write(4, stop_scan, sizeof(stop_scan));
+
+    if (n != sizeof(stop_scan)) {
+        fprintf(stderr, "Failed to send abort command\n");
+    }	
+}
+
 void send_config(const char *data) {
     if(*data) fprintf(stderr, "Sending configuration data:\n%s", data);
     unsigned char buf[255];
@@ -126,6 +154,11 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (signal(SIGINT, sigint_handler) == SIG_ERR) {
+        fprintf(stderr, "Got signal error\n");
+        return 1;
+    }
+
     libusb_context *context;
     libusb_init(&context);
     device_handle = libusb_open_device_with_vid_pid(context, VID, PID);
@@ -153,6 +186,7 @@ int main(int argc, char **argv) {
     int page = 1;
     FILE *fp = NULL;
     int sleep_time = 0;
+
     while(1) {
         unsigned char buf[0x3000];
         int num_bytes = bulk_read(3, buf, 0x3000);
@@ -175,7 +209,9 @@ int main(int argc, char **argv) {
         } else if(num_bytes == 2 && buf[0] == 0xc3 && buf[1] == 0x00) {
             fprintf(stderr, "ERROR: Paper jam\n"); break;
         } else if(num_bytes == 1 && buf[0] == SCAN_DONE) {
-            fprintf(stderr, "No more pages\n"); break;
+            fprintf(stderr, "Scan done\n"); break;
+	} else if (num_bytes == 1 && buf[0] == SCAN_ABORTED) {
+	    fprintf(stderr, "Scan aborted\n"); break;
         } else if((num_bytes == 1 && buf[0] == NEXT_PAGE) || sleep_time >= 10) {
             fprintf(stderr, "Feeding in another page");
             if(sleep_time >= 50) fprintf(stderr, " (timeout)");
