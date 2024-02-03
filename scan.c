@@ -27,7 +27,7 @@ void abort_scan();
 // Signal handler function
 void sigint_handler(int signum) {
     fprintf(stderr, "Caught %s signal (Ctrl+C). Stopping scan\n", strsignal(signum));
-    // You can add additional cleanup or handling code here
+    
     abort_scan(); 
 
     if (signum == SIGKILL) {
