@@ -133,6 +133,8 @@ void send_config(const char *data) {
 int main(int argc, char **argv) {
     const char *mode = "CGRAY";
     int resolution = 100;
+    int total_payload = 0;
+    
     if(argc > 1) {
         switch(*argv[1]) {
             case 'c': mode = "CGRAY";  break;
@@ -145,6 +147,7 @@ int main(int argc, char **argv) {
                 return 1;
         }
     }
+
     if(argc > 2) {
         resolution = atoi(argv[2]);
         if(resolution < 100 || resolution > 600 || resolution % 100) {
@@ -176,6 +179,7 @@ int main(int argc, char **argv) {
     //fprintf(stderr, "clear_halt: %i\n", result);
 
     control_in_vendor_device(1, 2, 0, 5); /* returns 05 10 01 02 00 */
+
     if(mode) {
         char *config = build_config(
                 mode, MIN(resolution, 300), resolution,
@@ -190,7 +194,10 @@ int main(int argc, char **argv) {
     while(1) {
         unsigned char buf[0x3000];
         int num_bytes = bulk_read(3, buf, 0x3000);
-        if(num_bytes) sleep_time = 0;
+        if(num_bytes) {
+		sleep_time = 0;
+	}
+
         if(num_bytes > 2) {
             if(!fp) {
                 char *fname = "image.raw";
@@ -198,6 +205,7 @@ int main(int argc, char **argv) {
                 fp = fopen(fname, "wb");
             }
             fwrite(buf, 1, num_bytes, fp);
+	    total_payload += num_bytes;
         } else if(num_bytes == 0 && sleep_time < 10) {
 #ifdef DEBUG
             fprintf(stderr, "Sleeping\n");
@@ -214,14 +222,19 @@ int main(int argc, char **argv) {
 	    fprintf(stderr, "Scan aborted\n"); break;
         } else if((num_bytes == 1 && buf[0] == NEXT_PAGE) || sleep_time >= 10) {
             fprintf(stderr, "Feeding in another page");
-            if(sleep_time >= 50) fprintf(stderr, " (timeout)");
+            if(sleep_time >= 50) {
+		    fprintf(stderr, " (timeout)");
+	    }
             fprintf(stderr, "\n");
             page++;
+
             if (fp) {
-                fclose(fp);
+            	fprintf(stderr, "Got %d bytes in payload\n", total_payload);
+	        fclose(fp);
                 fp = NULL;
+
+		total_payload = 0;
             }
-            //send_config("");
             sleep_time = 0;
         } else if(num_bytes == 1 && buf[0] == 0xc3) {
             fprintf(stderr, "Paper jam\n"); break;
@@ -229,12 +242,19 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Scan aborted\n"); break;
         } else {
             fprintf(stderr, "Received unknown data: %02x", buf[0]);
-            if(num_bytes == 2) fprintf(stderr, " %02x", buf[1]);
+            if(num_bytes == 2) {
+		fprintf(stderr, " %02x", buf[1]);
+	    }
             fprintf(stderr, "\n");
             break;
         }
     }
-    if(fp) fclose(fp);
+ 
+    if(fp) {
+	fprintf(stderr, "Got %d bytes in payload\n", total_payload);
+	fclose(fp);
+    }
+    
     control_in_vendor_device(2, 2, 0, 5); /* returns 05 10 02 02 00 */
 
     libusb_release_interface(device_handle, 0);
