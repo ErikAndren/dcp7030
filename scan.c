@@ -20,6 +20,13 @@
 #define NEXT_PAGE 0x81
 #define SCAN_ABORTED 0x83
 
+#define MIN_X_RES  100
+#define MIN_Y_RES  100
+#define MAX_Y_RES 2400
+#define MAX_X_RES  600
+
+#define RES_QUANT   50
+
 libusb_device_handle *device_handle;
 
 void abort_scan();
@@ -104,6 +111,9 @@ int bulk_write(int endpoint, unsigned char *buf, int length) {
 
 char *build_config(const char *mode, int resX, int resY, int w, int h) {
     char *data = calloc(255, sizeof(char));
+    if (data == NULL) {
+	    return NULL;
+    }
     snprintf(data, 255,
             "R=%d,%d\nM=%s\nC=NONE\nB=50\nN=50\nU=OFF\nP=OFF\nA=0,0,%d,%d\n",
             resX, resY, mode, w, h);
@@ -124,15 +134,52 @@ void abort_scan() {
 }
 
 void send_config(const char *data) {
-    if(*data) fprintf(stderr, "Sending configuration data:\n%s", data);
+    if(*data) {
+	    fprintf(stderr, "Sending configuration data:\n%s", data);
+    }
+
     unsigned char buf[255];
     int length = snprintf(buf, 255, "\x1bX\n%s\x80", data);
     bulk_write(4, buf, length);
 }
 
+int check_resolution(int res_x, int res_y) {
+    if(res_x < MIN_X_RES) {
+	fprintf(stderr, "ERROR: x resolution must be more or equal than %d, was %d\n", MIN_X_RES, res_x);
+	return 1;	
+    }
+
+    if(res_x > MAX_X_RES) {
+    	fprintf(stderr, "ERROR: x resolution must be less or equal than %d, was %d\n", MAX_X_RES, res_x);
+	return 1;
+    }
+
+    if(res_x % RES_QUANT) {
+	fprintf(stderr, "ERROR: x resolution is not evenly divisible by %d\n", RES_QUANT);
+    	return 1;
+    }
+
+    if(res_y < MIN_Y_RES) {
+	fprintf(stderr, "ERROR: y resolution must be more or equal than %d, was %d\n", MIN_Y_RES, res_y);
+	return 1;	
+    }
+
+    if(res_y > MAX_Y_RES) {
+    	fprintf(stderr, "ERROR: y resolution must be less or equal than %d, was %d\n", MAX_Y_RES, res_y);
+	return 1;
+    }
+
+    if(res_y % RES_QUANT) {
+	fprintf(stderr, "ERROR: y resolution must be less or equal than %d, was %d\n", RES_QUANT);
+	return 1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *mode = "CGRAY";
-    int resolution = 100;
+    int resolution_x = MIN_X_RES, resolution_y = MIN_Y_RES;
     int total_payload = 0;
     
     if(argc > 1) {
@@ -148,16 +195,26 @@ int main(int argc, char **argv) {
         }
     }
 
+    if(argc == 2) {
+	fprintf(stderr, "Assuming same resolution for x and y\n");
+	resolution_x = atoi(argv[2]);
+	resolution_y = resolution_x;
+
+	if (check_resolution(resolution_x, resolution_y)) {
+		return 1;
+	}
+    }
+
     if(argc > 2) {
-        resolution = atoi(argv[2]);
-        if(resolution < 100 || resolution > 600 || resolution % 100) {
-            fprintf(stderr, "ERROR: resolution must be a positive "
-                            "multiple of 100 no greater than 600\n");
+        resolution_x = atoi(argv[2]);
+        resolution_y = atoi(argv[3]);
+
+	if (check_resolution(resolution_x, resolution_y)) {
             return 1;
         }
     }
 
-    if (signal(SIGINT, sigint_handler) == SIG_ERR) {
+    if(signal(SIGINT, sigint_handler) == SIG_ERR) {
         fprintf(stderr, "Got signal error\n");
         return 1;
     }
@@ -182,10 +239,17 @@ int main(int argc, char **argv) {
 
     if(mode) {
         char *config = build_config(
-                mode, MIN(resolution, 300), resolution,
-                PAGE_WIDTH * MIN(resolution, 300)/100,
-                PAGE_HEIGHT * resolution/100);
-        send_config(config); free(config);
+                mode, resolution_x, resolution_y,
+                (PAGE_WIDTH * resolution_x) / 100,
+                (PAGE_HEIGHT * resolution_y) / 100);
+        
+	if (config == NULL) {
+		fprintf(stderr, "Failed to build config!\n");
+		return -1;
+	}
+
+	send_config(config);
+	free(config);
     }
     int page = 1;
     FILE *fp = NULL;
