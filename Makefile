@@ -7,6 +7,9 @@ all:
 debug:
 	$(MAKE) CFLAGS=-DDEBUG
 
+convert:
+	./raw2pnm image.raw
+
 crosscompile:
 	mips-openwrt-linux-gcc -std=gnu99 ${CFLAGS} -I${SDK_DIR}/staging_dir/target-mips_24kc_musl/usr/include/libusb-1.0 -o scan scan.c -L${SDK_DIR}/staging_dir/target-mips_24kc_musl/usr/lib/ -lusb-1.0
 	mips-openwrt-linux-gcc -std=gnu99 ${CFLAGS} -o raw2pnm raw2pnm.c
