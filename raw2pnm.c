@@ -58,14 +58,16 @@ int main(int argc, char **argv) {
         unsigned int width = (buf[2] << 8) + buf[1];
         unsigned int height = file_size(name) / (width + 3);
 
-        if(strchr("DHL", type)) /* color */
+	fprintf(stderr, "Calculated width to %d and and height to %d\n", width, height); 
+
+        if(strchr("DHL", type)) { /* color */
+	    fprintf(stderr, "Converting raw to color image\n");
             convert_ppm(width, height/3, raw_fp, name);
-        else if(type == '@') /* gray */
+	} else if(type == '@') { /* gray */
+	    fprintf(stderr, "Converting raw to gray scale image\n");
             convert_pgm(width, height, raw_fp, name);
-        else {
-            fprintf(stderr, "ERROR: '%s' has unrecognised type '%c'\n",
-                    name, type);
-            continue;
+	} else {
+            fprintf(stderr, "ERROR: '%s' has unrecognised type '%c'\n", name, type);
         }
     }
     return 0;
